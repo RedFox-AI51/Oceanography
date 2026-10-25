@@ -1,0 +1,12 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "ingredients": [
+    { "item": "minecraft:cod" },
+    { "item": "minecraft:salmon" },
+    { "item": "minecraft:tropical_fish" }
+  ],
+  "result": {
+    "id": "oceanography:chum",
+    "count": 4
+  }
+}
