@@ -1,3 +1,17 @@
 {
-  "parent": "block/lily_pad"
+  "render_type": "minecraft:cutout",
+  "textures": {
+    "particle": "oceanography:block/fish_food",
+    "pellets": "oceanography:block/fish_food"
+  },
+  "elements": [
+    {
+      "from": [0, 0.25, 0],
+      "to": [16, 0.25, 16],
+      "faces": {
+        "up":   { "uv": [0, 0, 16, 16], "texture": "#pellets" },
+        "down": { "uv": [0, 0, 16, 16], "texture": "#pellets" }
+      }
+    }
+  ]
 }
