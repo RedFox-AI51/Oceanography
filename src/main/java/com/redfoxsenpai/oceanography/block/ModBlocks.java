@@ -1,8 +1,8 @@
 package com.redfoxsenpai.oceanography.block;
 
 import com.redfoxsenpai.oceanography.Oceanography;
-import net.minecraft.sounds.SoundType;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.SoundType;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.registries.DeferredRegister;

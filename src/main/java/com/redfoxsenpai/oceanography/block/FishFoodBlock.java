@@ -1,5 +1,6 @@
 package com.redfoxsenpai.oceanography.block;
 
+import com.mojang.serialization.MapCodec;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
@@ -9,6 +10,7 @@ import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.LevelAccessor;
 import net.minecraft.world.level.LevelReader;
 import net.minecraft.world.level.block.BaseEntityBlock;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
@@ -19,10 +21,17 @@ import org.jetbrains.annotations.Nullable;
 
 public class FishFoodBlock extends BaseEntityBlock {
 
+    public static final MapCodec<FishFoodBlock> CODEC = simpleCodec(FishFoodBlock::new);
+
     protected static final VoxelShape SHAPE = Block.box(1, 0, 1, 15, 1.5, 15);
 
     public FishFoodBlock(Properties properties) {
         super(properties);
+    }
+
+    @Override
+    protected MapCodec<FishFoodBlock> codec() {
+        return CODEC;
     }
 
     @Override

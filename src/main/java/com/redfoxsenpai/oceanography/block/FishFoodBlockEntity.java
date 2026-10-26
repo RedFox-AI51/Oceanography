@@ -1,6 +1,7 @@
 package com.redfoxsenpai.oceanography.block;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -38,14 +39,16 @@ public class FishFoodBlockEntity extends BlockEntity {
     }
 
     @Override
-    protected void saveAdditional(CompoundTag tag) {
-        super.saveAdditional(tag);
+    protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
+        super.saveAdditional(tag, registries);
         tag.putInt("Capacity", capacity);
     }
 
     @Override
-    public void load(CompoundTag tag) {
-        super.load(tag);
-        capacity = tag.getInt("Capacity");
+    protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
+        super.loadAdditional(tag, registries);
+        if (tag.contains("Capacity")) {
+            capacity = tag.getInt("Capacity");
+        }
     }
 }
