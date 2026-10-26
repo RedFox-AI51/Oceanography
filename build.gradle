@@ -26,6 +26,9 @@ minecraft {
             workingDir = layout.projectDirectory.dir('run')
 
             systemProperty 'forge.enabledGameTestNamespaces', 'oceanography'
+
+            // Mixin needs to be told about our config when running from the IDE / Gradle
+            args '--mixin.config=oceanography.mixins.json'
         }
 
         register('client')
@@ -53,10 +56,18 @@ repositories {
 
 dependencies {
     implementation minecraft.dependency('net.minecraftforge:forge:1.21.1-52.1.15')
+    annotationProcessor 'org.spongepowered:mixin:0.8.7:processor'
 }
 
 tasks.withType(JavaCompile).configureEach {
     // Use the UTF-8 charset for Java compilation
     // This is done by default in Java 18+, but this ensures it no matter the Java or Gradle version
     options.encoding = 'UTF-8'
+}
+
+tasks.named('jar', Jar) {
+    manifest {
+        // Lets Mixin find our config when the mod is loaded from the built jar
+        attributes['MixinConfigs'] = 'oceanography.mixins.json'
+    }
 }
