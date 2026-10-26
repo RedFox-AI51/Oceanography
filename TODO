@@ -1,0 +1,6 @@
+WORLDGEN FEATURES:
+ - Increase World height to be a total of 768 blocks.
+ - Oceans down to -448 blocks.
+ - Mountains up to 319 blocks.
+ - Sea level at 63 blocks.
+ - Deepest trench at -400 blocks.
