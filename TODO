@@ -1,6 +1,19 @@
+# ✅ = complete
 WORLDGEN FEATURES:
- - Increase World height to be a total of 768 blocks.
- - Oceans down to -448 blocks.
- - Mountains up to 319 blocks.
- - Sea level at 63 blocks.
- - Deepest trench at -400 blocks.
+ - Increase World height to be a total of 768 blocks. ✅
+ - Oceans down to -448 blocks. ✅
+ - Mountains up to 319 blocks. ✅
+ - Sea level at 63 blocks. ✅
+ - Deepest trench at -400 blocks. ✅
+ - Change the ocean floor to be based on the ocean biome.
+
+OCEAN HEIGHTS:
+ - Warm Ocean: Y=30
+ - Frozen Ocean: Y=-20
+ - Ocean: Y=-20
+ - Cold Ocean: Y=-40
+ - Lukewarm Ocean: Y=10
+ - Deep Frozen Ocean: Y=-300
+ - Deep Lukewarm Ocean: Y=-350
+ - Deep Ocean: Y=-400
+ - Deep Cold Ocean: Y=-400
