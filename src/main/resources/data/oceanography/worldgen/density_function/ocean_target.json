@@ -1,0 +1,20 @@
+{
+  "type": "minecraft:flat_cache",
+  "argument": {
+    "type": "minecraft:add",
+    "argument1": "oceanography:shelf_floor",
+    "argument2": {
+      "type": "minecraft:mul",
+      "argument1": "oceanography:ocean_deepness",
+      "argument2": {
+        "type": "minecraft:add",
+        "argument1": "oceanography:deep_floor",
+        "argument2": {
+          "type": "minecraft:mul",
+          "argument1": -1,
+          "argument2": "oceanography:shelf_floor"
+        }
+      }
+    }
+  }
+}

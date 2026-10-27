@@ -1,0 +1,58 @@
+{
+  "type": "minecraft:spline",
+  "spline": {
+    "coordinate": "oceanography:temperature",
+    "points": [
+      {
+        "location": -1.0,
+        "derivative": 0,
+        "value": -1.11175
+      },
+      {
+        "location": -0.45,
+        "derivative": 0,
+        "value": -1.11175
+      },
+      {
+        "location": -0.33,
+        "derivative": 0,
+        "value": -1.268
+      },
+      {
+        "location": -0.27,
+        "derivative": 0,
+        "value": -1.268
+      },
+      {
+        "location": -0.15,
+        "derivative": 0,
+        "value": -1.11175
+      },
+      {
+        "location": 0.08,
+        "derivative": 0,
+        "value": -1.11175
+      },
+      {
+        "location": 0.2,
+        "derivative": 0,
+        "value": -0.87737
+      },
+      {
+        "location": 0.43,
+        "derivative": 0,
+        "value": -0.87737
+      },
+      {
+        "location": 0.55,
+        "derivative": 0,
+        "value": -0.72112
+      },
+      {
+        "location": 1.0,
+        "derivative": 0,
+        "value": -0.72112
+      }
+    ]
+  }
+}
