@@ -19,24 +19,24 @@ OCEAN HEIGHTS:
  - Deep Cold Ocean: Y=-400     ✅
 
 TO REMOVE:
- - Remove the Nether.
- - Remove the End.
- - Remove all hostile mobs (keeping passive and neutral mobs).
- - Remove all ocean based structures (shipwrecks, ocean ruins, etc).
- - Remove generation of sea grass and kelp from oceans.
+ - Remove the Nether.                                                 ✅
+ - Remove the End.                                                    ✅
+ - Remove all hostile mobs (keeping passive and neutral mobs).        ✅
+ - Remove all ocean based structures (shipwrecks, ocean ruins, etc).  ✅
+ - Remove generation of sea grass and kelp from oceans.               ✅
 
 REMOVE BIOMES:
- - minecraft:deep_dark
- - minecraft:lush_caves
- - minecraft:dripstone_caves
- - minecraft:savanna
- - minecraft:savanna_plateau
- - minecraft:windswept_savanna
- - minecraft:badlands
- - minecraft:wooded_badlands
- - minecraft:eroded_badlands
- - minecraft:stony_peaks
- - minecraft:jagged_peaks
- - minecraft:windswept_hills
- - minecraft:windswept_forest
- - minecraft:windswept_gravelly_hills
+ - minecraft:deep_dark                ✅
+ - minecraft:lush_caves               ✅
+ - minecraft:dripstone_caves          ✅
+ - minecraft:savanna                  ✅
+ - minecraft:savanna_plateau          ✅
+ - minecraft:windswept_savanna        ✅
+ - minecraft:badlands                 ✅
+ - minecraft:wooded_badlands          ✅
+ - minecraft:eroded_badlands          ✅
+ - minecraft:stony_peaks              ✅
+ - minecraft:jagged_peaks             ✅
+ - minecraft:windswept_hills          ✅
+ - minecraft:windswept_forest         ✅
+ - minecraft:windswept_gravelly_hills ✅

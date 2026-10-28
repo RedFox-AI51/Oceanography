@@ -45,6 +45,9 @@ public class VanillaFishHook {
 
         if (mob == null) return;
 
+        // The same fish can join a level more than once (dimension change); only set it up the first time.
+        if (!SchoolState.of(mob).markInstalled()) return;
+
         // Randomize size, same range as herring
         AttributeInstance scaleAttribute = mob.getAttribute(Attributes.SCALE);
         if (scaleAttribute != null) {
@@ -55,9 +58,10 @@ public class VanillaFishHook {
 
         try {
             GoalSelector goalSelector = (GoalSelector) GOAL_SELECTOR_FIELD.get(mob);
-            goalSelector.addGoal(3, new FishFlockGoal(mob, 1.0D));
             goalSelector.addGoal(2, new SeekChumGoal(mob, 1.2D));
             goalSelector.addGoal(1, new SeekFishFoodGoal(mob, 1.1D));
+            SchoolGoals.stripVanillaPlayerAvoidance(goalSelector);
+            SchoolGoals.install(mob, goalSelector, 0, 3);
         } catch (IllegalAccessException e) {
             Oceanography.LOGGER.error("Failed to inject schooling goal into vanilla fish", e);
         }

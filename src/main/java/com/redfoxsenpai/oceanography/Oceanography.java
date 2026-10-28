@@ -1,5 +1,6 @@
 package com.redfoxsenpai.oceanography;
 
+import com.redfoxsenpai.oceanography.entity.DepthKeeping;
 import com.redfoxsenpai.oceanography.entity.ModEntityTypes;
 import com.redfoxsenpai.oceanography.entity.SchoolingFishEntity;
 import com.redfoxsenpai.oceanography.item.ModItems;
@@ -49,6 +50,8 @@ public class Oceanography {
                 SpawnPlacementTypes.IN_WATER,
                 Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
                 (type, level, spawnType, pos, random) ->
+                        pos.getY() <= level.getSeaLevel() - 2 &&
+                        pos.getY() >= level.getSeaLevel() - DepthKeeping.SPAWN_DEPTH &&
                         level.getFluidState(pos).is(FluidTags.WATER) &&
                         level.getFluidState(pos.above()).is(FluidTags.WATER),
                 SpawnPlacementRegisterEvent.Operation.AND);

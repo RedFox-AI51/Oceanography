@@ -39,6 +39,7 @@ public class ChumEntity extends Entity {
 
     private final Set<UUID> claimedFish = new HashSet<>();
     private final Map<UUID, Integer> reservedSlots = new HashMap<>();
+    private final ArrayDeque<Integer> freedSlots = new ArrayDeque<>();
     private int nextSlotIndex = 0;
 
     private boolean hasSurfaced = false;
@@ -129,11 +130,22 @@ public class ChumEntity extends Entity {
     public int reserveSlot(Mob fish) {
         Integer existing = reservedSlots.get(fish.getUUID());
         if (existing != null) return existing;
+        if (!freedSlots.isEmpty()) {
+            int reused = freedSlots.pop();
+            reservedSlots.put(fish.getUUID(), reused);
+            return reused;
+        }
         if (nextSlotIndex >= MAX_EATEN) return -1;
 
         int slot = nextSlotIndex++;
         reservedSlots.put(fish.getUUID(), slot);
         return slot;
+    }
+
+    /** A fish that was scared off (or otherwise gave up) hands its slot back so another fish can use it. */
+    public void releaseSlot(Mob fish) {
+        Integer slot = reservedSlots.remove(fish.getUUID());
+        if (slot != null && !claimedFish.contains(fish.getUUID())) freedSlots.push(slot);
     }
 
     /** World position of a given feeding slot, arranged evenly around the chum. */

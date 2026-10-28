@@ -17,8 +17,14 @@ public class SeekFishFoodGoal extends Goal {
 
     private final Mob fish;
     private final double speedModifier;
+    private static final int SCAN_INTERVAL_TICKS = 20;     // the scan below looks at ~1,700 blocks, so don't do it every tick
+    private static final int FULL_BELLY_MIN_TICKS = 600;
+    private static final int FULL_BELLY_EXTRA_TICKS = 600;
+
     private BlockPos targetPos;
-    private boolean satisfied;
+    private boolean ate;
+    private long fullUntil;
+    private long nextScan;
 
     public SeekFishFoodGoal(Mob fish, double speedModifier) {
         this.fish = fish;
@@ -28,7 +34,9 @@ public class SeekFishFoodGoal extends Goal {
 
     @Override
     public boolean canUse() {
-        if (satisfied) return false;
+        long now = fish.level().getGameTime();
+        if (now < fullUntil || now < nextScan) return false;
+        nextScan = now + SCAN_INTERVAL_TICKS + fish.getRandom().nextInt(SCAN_INTERVAL_TICKS);
 
         BlockPos fishPos = fish.blockPosition();
         BlockPos nearest = null;
@@ -57,12 +65,13 @@ public class SeekFishFoodGoal extends Goal {
 
     @Override
     public boolean canContinueToUse() {
-        return !satisfied && targetPos != null
+        return !ate && targetPos != null
                 && fish.level().getBlockState(targetPos).is(ModBlocks.FISH_FOOD.get());
     }
 
     @Override
     public void start() {
+        ate = false;
         moveTowardTarget();
     }
 
@@ -78,7 +87,8 @@ public class SeekFishFoodGoal extends Goal {
                 && fish.level().getBlockEntity(targetPos) instanceof FishFoodBlockEntity be
                 && be.tryEat(fish)) {
 
-            satisfied = true;
+            ate = true;
+            fullUntil = fish.level().getGameTime() + FULL_BELLY_MIN_TICKS + fish.getRandom().nextInt(FULL_BELLY_EXTRA_TICKS);
 
             if (be.getCapacity() <= 0) {
                 fish.level().removeBlock(targetPos, false);

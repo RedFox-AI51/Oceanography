@@ -26,9 +26,15 @@ public class SeekChumGoal extends Goal {
 
     private final Mob fish;
     private final double speedModifier;
+    private static final int SCAN_INTERVAL_TICKS = 10;
+    private static final int FULL_BELLY_MIN_TICKS = 600;    // a fish that just ate loses interest for 30-60 seconds
+    private static final int FULL_BELLY_EXTRA_TICKS = 600;
+
     private ChumEntity targetChum;
     private int slotIndex = -1;
-    private boolean satisfied;
+    private boolean ate;                // this run succeeded
+    private long fullUntil;             // game time until which the fish ignores chum
+    private long nextScan;
 
     private int leapCooldown;
     private int leapTicksRemaining;
@@ -41,7 +47,9 @@ public class SeekChumGoal extends Goal {
 
     @Override
     public boolean canUse() {
-        if (satisfied) return false;
+        long now = fish.level().getGameTime();
+        if (now < fullUntil || now < nextScan) return false;
+        nextScan = now + SCAN_INTERVAL_TICKS + fish.getRandom().nextInt(SCAN_INTERVAL_TICKS);
 
         AABB searchBox = fish.getBoundingBox().inflate(SEARCH_RADIUS);
         List<ChumEntity> chumList = fish.level().getEntitiesOfClass(ChumEntity.class, searchBox,
@@ -62,11 +70,12 @@ public class SeekChumGoal extends Goal {
 
     @Override
     public boolean canContinueToUse() {
-        return targetChum != null && targetChum.isAlive() && targetChum.getEatenCount() < 12 && !satisfied;
+        return targetChum != null && targetChum.isAlive() && targetChum.getEatenCount() < 12 && !ate;
     }
 
     @Override
     public void start() {
+        ate = false;
         moveTowardSlot();
     }
 
@@ -88,7 +97,8 @@ public class SeekChumGoal extends Goal {
 
         if (distSqr < EAT_DISTANCE * EAT_DISTANCE) {
             if (targetChum.tryClaim(fish)) {
-                satisfied = true;
+                ate = true;
+                fullUntil = fish.level().getGameTime() + FULL_BELLY_MIN_TICKS + fish.getRandom().nextInt(FULL_BELLY_EXTRA_TICKS);
             }
             return;
         }
@@ -135,6 +145,8 @@ public class SeekChumGoal extends Goal {
 
     @Override
     public void stop() {
+        // scared off before eating: give the slot back so another fish can have it
+        if (targetChum != null && !ate) targetChum.releaseSlot(fish);
         targetChum = null;
         slotIndex = -1;
         leapTicksRemaining = 0;

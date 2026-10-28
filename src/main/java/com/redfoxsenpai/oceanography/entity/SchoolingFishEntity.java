@@ -14,6 +14,7 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.Vec3;
 
 public class SchoolingFishEntity extends AbstractFish {
 
@@ -44,10 +45,23 @@ public class SchoolingFishEntity extends AbstractFish {
         this.goalSelector.addGoal(1, new PanicGoal(this, 1.5D));
         this.goalSelector.addGoal(2, new SeekChumGoal(this, 1.2D));
         this.goalSelector.addGoal(3, new SeekFishFoodGoal(this, 1.1D));
-        this.goalSelector.addGoal(4, new FishFlockGoal(this, 1.0D));
-        this.goalSelector.addGoal(5, new RandomSwimmingGoal(this, 1.0D, 10));
+        // fear (priority 1) beats feeding (2, 3); calm schooling (4) loses to feeding
+        SchoolGoals.install(this, this.goalSelector, 1, 4);
+        this.goalSelector.addGoal(5, new DepthSwimGoal(this, 1.0D, 10));
         this.goalSelector.addGoal(6, new LookAtPlayerGoal(this, Player.class, 6.0F));
         this.goalSelector.addGoal(7, new RandomLookAroundGoal(this));
+    }
+
+    /**
+     * A weak pull back toward this fish's preferred depth band. It only acts when the fish is outside the band, and it
+     * is far weaker than any goal, so it never fights feeding or fleeing. It is what stops fish sinking to the sea floor.
+     */
+    @Override
+    public void travel(Vec3 travelVector) {
+        if (!this.level().isClientSide && this.isInWater()) {
+            DepthKeeping.applySpring(this);
+        }
+        super.travel(travelVector);
     }
 
     @Override
