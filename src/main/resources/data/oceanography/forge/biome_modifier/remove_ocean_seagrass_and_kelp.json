@@ -1,0 +1,15 @@
+{
+  "type": "forge:remove_features",
+  "biomes": "#minecraft:is_ocean",
+  "features": [
+    "minecraft:kelp_cold",
+    "minecraft:kelp_warm",
+    "minecraft:seagrass_cold",
+    "minecraft:seagrass_deep",
+    "minecraft:seagrass_deep_cold",
+    "minecraft:seagrass_deep_warm",
+    "minecraft:seagrass_normal",
+    "minecraft:seagrass_simple",
+    "minecraft:seagrass_warm"
+  ]
+}
