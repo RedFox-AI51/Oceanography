@@ -1,6 +1,7 @@
 {
   "values": [
     "#oceanography:no_natural_spawn/hostile",
-    "#oceanography:no_natural_spawn/water"
+    "#oceanography:no_natural_spawn/water",
+    "#oceanography:no_natural_spawn/other"
   ]
 }

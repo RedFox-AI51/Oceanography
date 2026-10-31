@@ -9,6 +9,8 @@ import net.minecraftforge.event.entity.EntityAttributeCreationEvent;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
+import net.minecraftforge.fml.ModLoadingContext;
+import net.minecraftforge.fml.config.ModConfig;
 import org.slf4j.Logger;
 import com.mojang.logging.LogUtils;
 
@@ -18,6 +20,8 @@ import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.tags.FluidTags;
 
 import com.redfoxsenpai.oceanography.block.ModBlocks;
+import com.redfoxsenpai.oceanography.current.ModParticles;
+import com.redfoxsenpai.oceanography.current.OceanographyConfig;
 import com.redfoxsenpai.oceanography.block.ModBlockEntities;
 
 @Mod(Oceanography.MODID)
@@ -27,6 +31,8 @@ public class Oceanography {
     public static final Logger LOGGER = LogUtils.getLogger();
 
     public Oceanography() {
+        ModLoadingContext.get().registerConfig(ModConfig.Type.COMMON, OceanographyConfig.COMMON_SPEC);
+
         IEventBus modEventBus = FMLJavaModLoadingContext.get().getModEventBus();
 
         ModEntityTypes.register(modEventBus);
@@ -34,6 +40,7 @@ public class Oceanography {
         ModCreativeTabs.register(modEventBus);
         ModBlocks.register(modEventBus);
         ModBlockEntities.register(modEventBus);
+        ModParticles.register(modEventBus);
 
         modEventBus.addListener(this::onEntityAttributeCreation);
         modEventBus.addListener(this::onSpawnPlacementRegister);

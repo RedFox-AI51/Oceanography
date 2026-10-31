@@ -90,7 +90,8 @@ public class FishFleeGoal extends Goal {
             nextSteer = now + STEER_INTERVAL;
             steer(now);
         }
-        SchoolSteering.swim(fish, heading, speed);
+        SchoolSteering.swim(fish, heading, speed, state.current(fish, now));
+        state.markSteered(now);
     }
 
     @Override
@@ -112,6 +113,7 @@ public class FishFleeGoal extends Goal {
         Vec3 flee = SchoolSteering.rotateY(away, state.getFleeJitter());
         flee = new Vec3(flee.x, state.getFleeDive(), flee.z);
 
+        Vec3 current = state.current(fish, now);
         Vec3 separation = Vec3.ZERO;
         Vec3 alignment = Vec3.ZERO;
         for (Mob mate : state.neighbours(6.0D, now)) {
@@ -119,7 +121,7 @@ public class FishFleeGoal extends Goal {
             Vec3 offset = pos.subtract(mate.position());
             double dist = offset.length();
             if (dist < SEPARATION_DISTANCE && dist > 1.0E-3D) separation = separation.add(offset.scale(1.0D / (dist * dist)));
-            alignment = alignment.add(mate.getDeltaMovement());
+            alignment = alignment.add(mate.getDeltaMovement().subtract(current));      // relative to the water
         }
         double sepLen = separation.length();
         if (sepLen > 1.0E-4D) separation = separation.scale(Math.min(1.0D, sepLen) / sepLen);

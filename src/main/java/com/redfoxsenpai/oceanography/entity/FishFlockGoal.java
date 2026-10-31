@@ -4,27 +4,34 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.phys.Vec3;
-import org.jetbrains.annotations.Nullable;
 
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
- * How a school swims when nothing is wrong, and how it pulls itself back together afterwards.
+ * How a school swims when nothing is wrong, and how schools form, split and re-form.
  *
- * Classic "boids" steering, three rules plus a few extras:
- *   separation  - don't crowd a neighbour
- *   alignment   - head the way your neighbours are heading
- *   cohesion    - drift toward the middle of the group (stragglers swim faster to catch up)
- *   wander      - the whole school follows one slowly curving path, derived from the lowest fish id in the group, so every
- *                 fish agrees on it without any communication and nothing needs saving
+ * Steering is "boids" with a few extras:
+ *   separation  - don't crowd any neighbour
+ *   alignment   - head the way your SCHOOLMATES (within 8 blocks) are heading
+ *   cohesion    - drift toward the middle of your schoolmates (within 24 blocks); stragglers swim faster to catch up
+ *   wander      - every school follows one slowly curving path, derived from its school id, so schoolmates travel together
+ *   individuality - each fish has a small personal angle and a slow personal meander, so no two are ever exactly parallel
  *   depth       - stay in the preferred water band (see DepthKeeping)
- *   unease      - a player closer than personal space makes fish drift out of the way and bunch up, without panicking
+ *   current     - swim relative to the water, and face upstream a little when the current is strong
+ *   unease      - a player or mob close by makes fish drift out of the way and bunch up, without panicking
  *
- * After a scare (see SchoolState) the regroup phase starts with cohesion almost off and ramps it up, and widens the search
- * radius, so scattered fish drift back together over several seconds instead of snapping into formation.
- * Fish with no company are left to DepthSwimGoal.
+ * Schools are not fixed. Each fish belongs to a school (identified by an id); it only aligns and cohesion-steers with fish of
+ * its own school. Membership changes:
+ *   joining   - a fish adopts the school most of its close neighbours belong to, so small groups are absorbed by larger ones
+ *               and two fish that meet merge into one school
+ *   lost      - after a severe scare some fish become lost (see SchoolState): they leave their school, wander on a path of
+ *               their own, and afterwards seek company, joining a school or founding a new one with other lost fish
+ *   wandering off - now and then a fish leaves its school briefly anyway
+ * Moderate scares do not lose anyone: the school bolts together and regroups.
  */
 public class FishFlockGoal extends Goal {
 
@@ -32,9 +39,18 @@ public class FishFlockGoal extends Goal {
     private static final double ALIGN_RADIUS = 8.0D;
     private static final double COHESION_RADIUS = 24.0D;
     private static final double REGROUP_RADIUS = 24.0D;
+    private static final double JOIN_RADIUS = 8.0D;
     private static final double SEPARATION_DISTANCE = 1.1D;
     private static final double COHESION_DEADZONE = 2.2D;
     private static final double LOOKAHEAD = 4.0D;
+
+    private static final double ALIGN_WEIGHT = 0.8D;            // below 1: schools are a loose crowd, not a formation
+    private static final double INDIVIDUALITY_WEIGHT = 0.35D;
+    private static final double SEEK_WEIGHT = 0.8D;             // pull toward any company when you have none of your own
+    private static final double RHEOTAXIS_WEIGHT = 0.35D;       // face upstream when the current is strong
+    private static final double RHEOTAXIS_FULL_FLOW = 0.03D;    // blocks per tick at which that is at full strength
+    private static final int SWITCH_COOLDOWN_TICKS = 60;
+
     private static final int STEER_INTERVAL = 2;
     private static final int LONELY_GRACE_TICKS = 60;
     private static final int IDLE_RECHECK_TICKS = 10;
@@ -108,7 +124,8 @@ public class FishFlockGoal extends Goal {
             nextSteer = now + STEER_INTERVAL;
             steer(now);
         }
-        SchoolSteering.swim(fish, heading, speed);
+        SchoolSteering.swim(fish, heading, speed, state.current(fish, now));
+        state.markSteered(now);
     }
 
     @Override
@@ -131,31 +148,36 @@ public class FishFlockGoal extends Goal {
 
     private void steer(long now) {
         Vec3 pos = fish.position();
-        boolean regrouping = state.isRegrouping();
+        boolean lost = state.isLost(now);
+        boolean regrouping = state.isRegrouping() && !lost;
         double progress = state.regroupProgress();             // 0 right after a scare .. 1 recovered
         double alignRadius = regrouping ? REGROUP_RADIUS : ALIGN_RADIUS;
         double cohesionRadius = regrouping ? REGROUP_RADIUS : COHESION_RADIUS;
         double reach = Math.max(alignRadius, cohesionRadius);
         double alert = state.getAlert();
+        UUID mySchool = state.schoolIdOrSelf();
+        Vec3 current = state.current(fish, now);
 
         List<Mob> mates = state.neighbours(reach, now);
 
         Vec3 separation = Vec3.ZERO;
         Vec3 alignment = Vec3.ZERO;
-        Vec3 centre = Vec3.ZERO;
+        Vec3 kinCentre = Vec3.ZERO;
+        Vec3 everyone = Vec3.ZERO;
         int alignCount = 0;
-        int count = 0;
-        boolean anyMate = false;
-        UUID lowest = fish.getUUID();
-        UUID currentSchool = state.getSchoolId();
-        boolean sawCurrentSchool = false;
+        int kinCount = 0;
+        int allCount = 0;
+        Map<UUID, Integer> votes = new HashMap<>();
 
         for (Mob mate : mates) {
             if (!isValid(mate)) continue;
             Vec3 offset = pos.subtract(mate.position());
             double dist = offset.length();
             if (dist > reach) continue;
-            anyMate = true;
+
+            SchoolState mateState = SchoolState.peek(mate);
+            boolean mateLost = mateState != null && mateState.isLost(now);
+            UUID mateSchool = mateState != null ? mateState.schoolIdOrSelf() : mate.getUUID();
 
             if (dist < SEPARATION_DISTANCE) {
                 if (dist < 1.0E-3D) {
@@ -165,56 +187,85 @@ public class FishFlockGoal extends Goal {
                 double d = Math.max(dist, 0.15D);
                 separation = separation.add(offset.scale(1.0D / (d * d)));
             }
-            if (dist <= alignRadius) {
-                alignment = alignment.add(mate.getDeltaMovement());
-                alignCount++;
-            }
-            if (dist <= cohesionRadius) {
-                centre = centre.add(mate.position());
-                count++;
-            }
 
-            // School identity is gossiped: each fish adopts the lowest id that any neighbour has heard of, so the id
-            // spreads along chains of fish and a school that was pulled apart still agrees on one wander path.
-            UUID id = mate.getUUID();
-            if (id.compareTo(lowest) < 0) lowest = id;
-            SchoolState mateState = SchoolState.peek(mate);
-            UUID mateSchool = mateState != null ? mateState.getSchoolId() : null;
-            if (mateSchool != null && mateSchool.compareTo(lowest) < 0) lowest = mateSchool;
-            if (id.equals(currentSchool)) sawCurrentSchool = true;
+            everyone = everyone.add(mate.position());
+            allCount++;
+
+            boolean kin = !lost && !mateLost && mateSchool.equals(mySchool);
+            if (kin) {
+                if (dist <= cohesionRadius) {
+                    kinCentre = kinCentre.add(mate.position());
+                    kinCount++;
+                }
+                if (dist <= alignRadius) {
+                    // relative to the water: a mate's ground velocity includes the current, and fish steer relative to
+                    // the water, so using it directly would count the current twice and compound every round
+                    alignment = alignment.add(mate.getDeltaMovement().subtract(current));
+                    alignCount++;
+                }
+            }
+            if (!mateLost && dist <= JOIN_RADIUS) votes.merge(mateSchool, 1, Integer::sum);
         }
 
-        // Sticky school identity: only change it when the old one is gone or a lower id turns up.
-        if (anyMate && (currentSchool == null
-                || (!sawCurrentSchool && !currentSchool.equals(fish.getUUID()))
-                || lowest.compareTo(currentSchool) < 0)) {
-            state.setSchoolId(lowest);
-            currentSchool = lowest;
+        // ---- membership: join the school most of your close neighbours belong to. Ties go to the lower id, so two fish
+        // that meet merge in one direction instead of swapping schools forever. ----
+        if (!lost && now - state.getLastSwitchTick() > SWITCH_COOLDOWN_TICKS && !votes.isEmpty()) {
+            int kinNear = votes.getOrDefault(mySchool, 0);
+            UUID bestId = null;
+            int bestCount = -1;
+            for (Map.Entry<UUID, Integer> entry : votes.entrySet()) {
+                if (entry.getKey().equals(mySchool)) continue;
+                int c = entry.getValue();
+                if (c > bestCount || (c == bestCount && entry.getKey().compareTo(bestId) < 0)) {
+                    bestId = entry.getKey();
+                    bestCount = c;
+                }
+            }
+            if (bestId != null && (bestCount > kinNear || (bestCount == kinNear && bestId.compareTo(mySchool) < 0))) {
+                state.setSchoolId(bestId, now);
+                mySchool = bestId;
+            }
         }
 
+        // ---- every so often a fish simply wanders off ----
+        if (!lost) {
+            state.maybeDefect(now);
+            if (state.isLost(now)) {
+                lost = true;
+                mySchool = state.schoolIdOrSelf();
+                kinCount = 0;
+                alignCount = 0;
+            }
+        }
+
+        // ---- cohesion ----
         Vec3 cohesion = Vec3.ZERO;
         double distToCentre = 0.0D;
-        if (count > 0) {
-            centre = centre.scale(1.0D / count);
-            Vec3 toCentre = centre.subtract(pos);
+        if (kinCount > 0) {
+            Vec3 toCentre = kinCentre.scale(1.0D / kinCount).subtract(pos);
             distToCentre = toCentre.length();
             if (distToCentre > COHESION_DEADZONE) {
                 cohesion = toCentre.scale(1.0D / distToCentre)
                         .scale(Math.min(1.0D, (distToCentre - COHESION_DEADZONE) / 6.0D));
             }
         } else if (regrouping && state.getRally() != null) {
-            // nobody in sight after a scare: head for where the school was
+            // nobody of my school in sight after a scare: head for where the school was
             Vec3 toRally = state.getRally().subtract(pos);
             distToCentre = toRally.length();
             if (distToCentre > 1.5D) cohesion = toRally.scale(1.0D / distToCentre);
         }
+        // no schoolmates at all but other fish around (and not lost): look for company
+        if (!lost && kinCount == 0 && allCount > 0) {
+            Vec3 toAll = everyone.scale(1.0D / allCount).subtract(pos);
+            distToCentre = toAll.length();
+            cohesion = distToCentre > 1.0E-6D ? toAll.scale(SEEK_WEIGHT / distToCentre) : Vec3.ZERO;
+        }
         alignment = alignCount > 0 && alignment.lengthSqr() > 1.0E-8D ? alignment.normalize() : Vec3.ZERO;
 
         double sepLen = separation.length();
-        if (sepLen > 1.0E-4D) separation = separation.scale(Math.min(1.0D, sepLen) / sepLen);
-        else separation = Vec3.ZERO;
+        separation = sepLen > 1.0E-4D ? separation.scale(Math.min(1.0D, sepLen) / sepLen) : Vec3.ZERO;
 
-        // An uneasy player nearby: make room, and bunch up a little.
+        // ---- an uneasy player or mob nearby: make room ----
         Vec3 avoid = Vec3.ZERO;
         Vec3 threat = state.getThreatPos();
         if (alert > 0.02D && threat != null) {
@@ -223,16 +274,30 @@ public class FishFlockGoal extends Goal {
         }
 
         double wCohesion = (regrouping ? 0.10D + 1.30D * progress : 0.90D) * (1.0D + alert);
-        double wAlignment = regrouping ? 0.30D + 0.70D * progress : 1.00D;
+        double wAlignment = (regrouping ? 0.30D + 0.70D * progress : 1.00D) * ALIGN_WEIGHT;
         double wWander = regrouping ? 0.15D + 0.40D * progress : 0.55D;
+        if (lost) {          // a lost fish follows a path of its own and ignores the school it left
+            wWander = 1.0D;
+            wCohesion = 0.0D;
+        }
 
-        Vec3 wander = schoolWander(currentSchool, fish.getUUID(), now);
+        UUID pathKey = lost ? fish.getUUID() : mySchool;
+        Vec3 wander = SchoolSteering.rotateY(schoolWander(pathKey, now), state.getWanderOffset());
+        Vec3 individuality = state.individualMeander(now).scale(INDIVIDUALITY_WEIGHT);
         Vec3 depth = new Vec3(0.0D, SchoolSteering.verticalBias(fish), 0.0D);
+
+        // ---- face upstream when the current is strong ----
+        double flow = Math.hypot(current.x, current.z);
+        Vec3 upstream = flow > 0.004D
+                ? new Vec3(-current.x / flow, 0.0D, -current.z / flow).scale(Mth.clamp(flow / RHEOTAXIS_FULL_FLOW, 0.0D, 1.0D) * RHEOTAXIS_WEIGHT)
+                : Vec3.ZERO;
 
         Vec3 sum = separation.scale(1.6D)
                 .add(alignment.scale(wAlignment))
                 .add(cohesion.scale(wCohesion))
                 .add(wander.scale(wWander))
+                .add(individuality)
+                .add(upstream)
                 .add(avoid)
                 .add(depth);
         sum = new Vec3(sum.x, sum.y * 0.6D, sum.z);
@@ -250,11 +315,10 @@ public class FishFlockGoal extends Goal {
     }
 
     /**
-     * One slowly curving path per school. Every fish that has the same school id computes the same direction at the same
-     * time, so the group travels together with no communication. The path loops, so schools stay roughly in one area.
+     * One slowly curving path per school. Every fish with the same school id computes the same direction at the same time,
+     * so the group travels together with no communication. The path loops, so schools stay roughly in one area.
      */
-    private static Vec3 schoolWander(@Nullable UUID id, UUID fallback, long now) {
-        UUID key = id != null ? id : fallback;
+    private static Vec3 schoolWander(UUID key, long now) {
         long h = key.getMostSignificantBits() ^ key.getLeastSignificantBits();
         h *= 0x9E3779B97F4A7C15L;
         h ^= h >>> 29;

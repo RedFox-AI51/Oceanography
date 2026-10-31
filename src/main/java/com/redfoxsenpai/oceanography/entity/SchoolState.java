@@ -1,9 +1,11 @@
 package com.redfoxsenpai.oceanography.entity;
 
+import com.redfoxsenpai.oceanography.current.OceanCurrents;
 import net.minecraft.util.Mth;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.EntitySelector;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.MobCategory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
@@ -44,6 +46,26 @@ public final class SchoolState {
     static final double FAST_APPROACH = 0.24D;
     /** Moving this close always spooks fish (unless the player is sneaking). */
     static final double CLOSE_RADIUS = 2.0D;
+
+    /** Other mobs (anything that is not a water creature) are noticed from this far away. */
+    static final double MOB_NOTICE_RADIUS = 12.0D;
+
+    // ---- schools breaking apart and re-forming ------------------------------------------------------------------------
+    /**
+     * When true, a severe scare can make individual fish "lost": they leave their school, wander alone, and later join
+     * whatever school they find (or start a new one with other lost fish). When false, scattered fish always regroup.
+     */
+    public static final boolean SCHOOLS_BREAK_APART = true;
+    /** A scare must be stronger than this to lose any fish; the chance rises with the strength, up to LOST_CAP. */
+    static final float LOST_THRESHOLD = 0.60F;
+    static final float LOST_SCALE = 2.0F;
+    static final float LOST_CAP = 0.85F;
+    static final int LOST_MIN_TICKS = 200;           // 10 s
+    static final int LOST_EXTRA_TICKS = 800;         // up to 40 s more
+    /** Every so often a fish drifts off on its own anyway (per steering step; one step is 2 ticks). */
+    static final double DEFECT_CHANCE_PER_STEER = 1.0D / 3000.0D;
+    static final int DEFECT_MIN_TICKS = 100;
+    static final int DEFECT_EXTRA_TICKS = 200;
 
     /** How much of a scare is passed on to neighbours, per hop. Panic spreads through the school like a ripple. */
     static final float CONTAGION_DECAY = 0.85F;
@@ -95,6 +117,19 @@ public final class SchoolState {
     @Nullable private Vec3 rally;           // where the school was when it broke, for fish that find nobody nearby
 
     @Nullable private UUID schoolId;
+    private long lostUntil;
+    private long lastSwitchTick = Long.MIN_VALUE / 2;
+
+    // Each fish is a little different, so even fish in one school never move in perfect lockstep.
+    private final double wanderOffset;      // personal angle off the school's shared path, radians
+    private final double phase;
+    private final double phase2;
+    private final int meanderDirection;
+
+    private long lastSteerTick = Long.MIN_VALUE / 2;
+    private Vec3 currentCache = Vec3.ZERO;
+    private long currentCacheTick = Long.MIN_VALUE / 2;
+    private long nextMobSense;
 
     @Nullable private UUID lastPlayer;
     @Nullable private Vec3 lastPlayerPos;
@@ -108,6 +143,10 @@ public final class SchoolState {
     private SchoolState(Mob mob) {
         this.ref = new WeakReference<>(mob);
         this.speedFactor = 0.92F + mob.getRandom().nextFloat() * 0.16F;
+        this.wanderOffset = (mob.getRandom().nextDouble() - 0.5D) * 0.6D;
+        this.phase = mob.getRandom().nextDouble() * Math.PI * 2.0D;
+        this.phase2 = mob.getRandom().nextDouble() * Math.PI * 2.0D;
+        this.meanderDirection = mob.getRandom().nextInt(2) == 0 ? 1 : -1;
     }
 
     @Nullable
@@ -135,7 +174,61 @@ public final class SchoolState {
     @Nullable public Vec3 getThreatPos() { return threatPos; }
     @Nullable public Vec3 getRally() { return rally; }
     @Nullable public UUID getSchoolId() { return schoolId; }
-    public void setSchoolId(@Nullable UUID id) { this.schoolId = id; }
+    public double getWanderOffset() { return wanderOffset; }
+    public long getLastSwitchTick() { return lastSwitchTick; }
+    public long getLastSteerTick() { return lastSteerTick; }
+
+    /** The school this fish belongs to; a fish with no school is its own school of one. */
+    public UUID schoolIdOrSelf() {
+        if (schoolId != null) return schoolId;
+        Mob mob = mob();
+        return mob != null ? mob.getUUID() : new UUID(0L, 0L);
+    }
+
+    public void setSchoolId(UUID id, long now) {
+        this.schoolId = id;
+        this.lastSwitchTick = now;
+    }
+
+    public boolean isLost(long now) { return now < lostUntil; }
+
+    /** Leave the school and wander alone for a while. A lost fish is a school of one, with a path of its own. */
+    public void becomeLost(long now, int ticks) {
+        Mob mob = mob();
+        if (mob == null) return;
+        lostUntil = now + ticks;
+        schoolId = mob.getUUID();
+        lastSwitchTick = now;
+        regroupLeft = 0;
+        rally = null;
+    }
+
+    /** Now and then a fish simply wanders off. */
+    public void maybeDefect(long now) {
+        Mob mob = mob();
+        if (mob == null || isLost(now)) return;
+        if (mob.getRandom().nextDouble() < DEFECT_CHANCE_PER_STEER) {
+            becomeLost(now, DEFECT_MIN_TICKS + mob.getRandom().nextInt(DEFECT_EXTRA_TICKS));
+        }
+    }
+
+    /** A slow personal meander, added to a fish's heading so that no two fish are ever exactly parallel. */
+    public Vec3 individualMeander(long now) {
+        double a = phase + 0.0035D * now * meanderDirection + 0.8D * Math.sin(now / 90.0D + phase2);
+        return new Vec3(Math.cos(a), 0.0D, Math.sin(a));
+    }
+
+    /** Called by the swimming goals every tick they steer the fish, so other systems know it is under its own power. */
+    public void markSteered(long now) { lastSteerTick = now; }
+
+    /** The ocean current at the fish, refreshed every few ticks (it changes slowly). */
+    public Vec3 current(Mob mob, long now) {
+        if (now - currentCacheTick >= 5L) {
+            currentCache = OceanCurrents.at(mob.level(), mob.getX(), mob.getY(), mob.getZ());
+            currentCacheTick = now;
+        }
+        return currentCache;
+    }
 
     /** 0 right after a scare, ramping to 1 when the fish has fully recovered. Always 1 when not regrouping. */
     public double regroupProgress() {
@@ -201,6 +294,10 @@ public final class SchoolState {
         if (now >= nextSense) {
             nextSense = now + SENSE_INTERVAL + mob.getRandom().nextInt(3);
             sensePlayers(mob, now);
+        }
+        if (now >= nextMobSense) {
+            nextMobSense = now + 8 + mob.getRandom().nextInt(5);
+            senseMobs(mob);
         }
     }
 
@@ -285,10 +382,18 @@ public final class SchoolState {
 
     private void endPanic(Mob mob) {
         boolean wasScatter = scatter;
+        float intensity = panicIntensity;
         panicTicks = 0;
         startDelay = 0;
         scatter = false;
         panicIntensity = 0.0F;
+
+        // After a severe scare some fish never find their way back: they are lost, and wander until they find company.
+        if (SCHOOLS_BREAK_APART && wasScatter
+                && mob.getRandom().nextFloat() < Mth.clamp((intensity - LOST_THRESHOLD) * LOST_SCALE, 0.0F, LOST_CAP)) {
+            becomeLost(mob.level().getGameTime(), LOST_MIN_TICKS + mob.getRandom().nextInt(LOST_EXTRA_TICKS));
+            return;
+        }
         regroupTotal = (wasScatter ? 220 : 120) + mob.getRandom().nextInt(120);
         regroupLeft = regroupTotal;
     }
@@ -352,5 +457,62 @@ public final class SchoolState {
         }
 
         if (threat >= PANIC_THRESHOLD) directThreat(playerPos, (float) Math.min(1.0D, threat));
+    }
+
+    /**
+     * Fish react to every other mob except water creatures, the same way they react to a player: a mob charging at the
+     * school makes it bolt, one wandering close just makes them move over. Bigger mobs are scarier, and a mob in the
+     * water is more alarming than one on the shore.
+     */
+    private void senseMobs(Mob self) {
+        List<Mob> others = self.level().getEntitiesOfClass(Mob.class, self.getBoundingBox().inflate(MOB_NOTICE_RADIUS),
+                other -> other != self && other.isAlive() && !isWaterCreature(other));
+        if (others.isEmpty()) return;
+
+        double bestThreat = 0.0D;
+        Vec3 bestPos = null;
+        double bestPolite = 0.0D;
+        Vec3 politePos = null;
+
+        for (Mob other : others) {
+            Vec3 otherPos = other.position().add(0.0D, other.getBbHeight() * 0.5D, 0.0D);
+            Vec3 toFish = self.position().subtract(otherPos);
+            double dist = Math.max(toFish.length(), 1.0E-3D);
+            Vec3 velocity = other.getDeltaMovement();
+            double speed = velocity.length();
+            double approach = Math.max(0.0D, velocity.dot(toFish.scale(1.0D / dist)));      // blocks/tick toward the fish
+
+            double size = Mth.clamp(Math.sqrt(other.getBbWidth() * other.getBbHeight()) / 0.9D, 0.3D, 1.6D);
+            double medium = other.isInWater() ? 1.0D : 0.6D;
+
+            double proximity = Mth.clamp(1.0D - dist / MOB_NOTICE_RADIUS, 0.0D, 1.0D);
+            double rush = Math.min(1.5D, approach / FAST_APPROACH);
+            double threat = proximity * rush * 1.3D * size * medium;
+            if (dist < CLOSE_RADIUS * size && speed > 0.04D) threat = Math.max(threat, (0.5D * size + 0.1D) * medium);
+
+            double polite = Mth.clamp(1.0D - dist / (PERSONAL_SPACE * size), 0.0D, 1.0D) * medium * 0.8D;
+            if (polite > bestPolite) {
+                bestPolite = polite;
+                politePos = otherPos;
+            }
+            if (threat > bestThreat) {
+                bestThreat = threat;
+                bestPos = otherPos;
+            }
+        }
+
+        if (bestPolite > 0.04D && !isPanicking() && politePos != null) {
+            alert = Math.max(alert, (float) bestPolite);
+            threatPos = politePos;
+        }
+        if (bestPos != null && bestThreat >= PANIC_THRESHOLD) directThreat(bestPos, (float) Math.min(1.0D, bestThreat));
+    }
+
+    private static boolean isWaterCreature(Mob other) {
+        MobCategory category = other.getType().getCategory();
+        return category == MobCategory.WATER_CREATURE
+                || category == MobCategory.WATER_AMBIENT
+                || category == MobCategory.UNDERGROUND_WATER_CREATURE
+                || category == MobCategory.AXOLOTLS;
     }
 }

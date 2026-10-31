@@ -97,15 +97,18 @@ final class SchoolSteering {
         return bias + DepthKeeping.steeringBias(mob);
     }
 
-    /** Ease the fish's velocity toward heading * speed and turn its body to face where it is going. */
-    static void swim(Mob mob, Vec3 heading, double speed) {
-        Vec3 current = mob.getDeltaMovement();
-        Vec3 wanted = heading.lengthSqr() > 1.0E-6D
-                ? heading.normalize().scale(speed * DRAG_COMPENSATION)
-                : Vec3.ZERO;
-        Vec3 next = current.add(wanted.subtract(current).scale(TURN_RESPONSE));
+    /**
+     * Ease the fish's velocity toward "swim at this speed in this direction, relative to the water" plus the water's own
+     * motion (the ocean current), and turn its body to face the way it is swimming. With no current this is plain
+     * swimming; in a current the fish is carried along and has to swim against it to hold position.
+     */
+    static void swim(Mob mob, Vec3 heading, double speed, Vec3 waterVelocity) {
+        Vec3 velocity = mob.getDeltaMovement();
+        Vec3 swimming = heading.lengthSqr() > 1.0E-6D ? heading.normalize().scale(speed) : Vec3.ZERO;
+        Vec3 wanted = swimming.add(waterVelocity).scale(DRAG_COMPENSATION);
+        Vec3 next = velocity.add(wanted.subtract(velocity).scale(TURN_RESPONSE));
         mob.setDeltaMovement(next);
-        faceHeading(mob, next);
+        faceHeading(mob, swimming.lengthSqr() > 1.0E-8D ? swimming : next);
     }
 
     private static void faceHeading(Mob mob, Vec3 velocity) {
