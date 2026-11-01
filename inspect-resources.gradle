@@ -1,0 +1,29 @@
+allprojects {
+    afterEvaluate {
+        tasks.register("inspectResources") {
+            doLast {
+                def resources = sourceSets.main.resources
+                def task = tasks.named("processResources").get()
+
+                println "\n=== RESOURCE DIRECTORIES ==="
+                resources.srcDirs.each { println it }
+
+                println "\n=== SEAHORSE SOURCE FILE ==="
+                println resources.asFileTree.matching {
+                    include "**/seahorse.geo.json"
+                }.files
+
+                println "\n=== PROCESS RESOURCES TASK ==="
+                println "Enabled: ${task.enabled}"
+                println "Source files:"
+                task.source.files.each {
+                    if (it.name.contains("seahorse")) {
+                        println it
+                    }
+                }
+
+                println "Destination: ${task.destinationDir}"
+            }
+        }
+    }
+}

@@ -48,6 +48,13 @@ minecraft {
 }
 
 repositories {
+    maven {
+        name = 'GeckoLib'
+        url = 'https://dl.cloudsmith.io/public/geckolib3/geckolib/maven/'
+        content {
+            includeGroup("software.bernie.geckolib")
+        }
+    }
     minecraft.mavenizer(it) // In Kotlin, it = this
     maven fg.forgeMaven
     maven fg.minecraftLibsMaven
@@ -57,6 +64,7 @@ repositories {
 dependencies {
     implementation minecraft.dependency('net.minecraftforge:forge:1.21.1-52.1.15')
     annotationProcessor 'org.spongepowered:mixin:0.8.7:processor'
+    implementation "software.bernie.geckolib:geckolib-forge-1.21.1:4.8.3"
 }
 
 tasks.withType(JavaCompile).configureEach {
